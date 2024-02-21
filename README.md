@@ -20,7 +20,9 @@ openAI 에서 여러가지 게임들을 통해 강화학습을 테스트 할 수
 
 이중에서 저희가 목요일날 dqn으로 구현해 볼 것은 Toy text에 들어가서 네번째에 있는 frozenlake입니다.
 
+
 [frozenlake](https://www.gymlibrary.dev/environments/toy_text/frozen_lake/)
+
 
 제가 어떻게 해결해야할 문제를 분석하는지는 목요일날 알려드리겠습니다.
 <img width="345" alt="image" src="https://github.com/doeunjua/frozenlake/assets/122878319/bacc7f53-ab28-4816-927a-6ec7ac6aacd3">
