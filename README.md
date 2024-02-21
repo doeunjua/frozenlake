@@ -14,7 +14,8 @@ openAI 에서 여러가지 게임들을 통해 강화학습을 테스트 할 수
 
 사이트에 들어가서 왼쪽을보면 아래 첨부한 이미지를 찾을 수 있습니다. 이게 gym에서 제공하는 환경들입니다.
 
-![alt text](image.png)
+<img width="345" alt="image" src="https://github.com/doeunjua/frozenlake/assets/122878319/8a4a45eb-959f-4513-9ea1-be7ce8810c71">
+
 
 이중에서 저희가 목요일날 dqn으로 구현해 볼 것은 Toy text에 들어가서 네번째에 있는 frozenlake입니다.
 
