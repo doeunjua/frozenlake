@@ -147,3 +147,139 @@ Q-table과 dqn중 뭐가 더 적합할지에 대한 나름의 기준을 gpt에�
 # **4. DQN으로 frozenlake 구현하기**
 
 수업시간에 같이 해봅시다.
+```python
+import gym
+import numpy as np
+import random
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+from collections import deque
+import matplotlib.pyplot as plt
+
+
+
+custom_map = [
+    'FFFF',
+    'FHFH',
+    'FFFH',
+    'HFFG'
+]
+
+env = gym.make("FrozenLake-v1", desc=custom_map, is_slippery=False)
+state_size = env.observation_space.n
+action_size = env.action_space.n
+
+
+class DQNAgent:
+    def __init__(self, state_size, action_size): #하이퍼 파라미터값 설정 여러분들 맘대로 설정해보셔도 돼요요
+
+        self.state_size = state_size
+        self.action_size = action_size
+        self.memory = deque(maxlen=2000)
+        #deque는 양방향 큐로, maxlen으로 최대 길이를 설정함으로써 고정된 크기의 메모리를 유지할 수 있습니다.
+        self.gamma = 0.95    
+        self.epsilon = 1.0  
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
+        self.model = self._build_model() #클래스 호출할 때 모델을 만들어 주는 코드에요 재필이 오빠 수업때 DQN(1, 4, 0.001)을 호출하는 부분 기억 나시나요? 이 코드는 그것의 역할을 해요. 
+
+    def _build_model(self): # 재필이 오빠가 할때는 layers.Dense해서 신경망 만들고 call함수에 넣어줘서 순전파 과정 거쳤죠? 근데 sequential쓰면 알아서 다 해줍니다.
+        
+        model = Sequential()
+        model.add(Dense(16, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(16, activation='relu'))
+        model.add(Dense(self.action_size, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
+        #손실 함수로는 평균 제곱 오차(MSE: Mean Squared Error)를 사용하며, 이는 에이전트의 예측과 실제 보상 사이의 차이를 최소화하는 데 사용됩니다.
+        return model
+
+    def remember(self, state, action, reward, next_state, done): #메모리에 저장하는 함수
+        self.memory.append((state, action, reward, next_state, done))
+
+    def act(self, state): #입실론 그리디 방법을 사용해서 액션을 선택하는 함수
+        if np.random.rand() <= self.epsilon:
+            return env.action_space.sample()
+        #random.randrange(self.action_size) 또는 randint써도됨
+        act_values = self.model.predict(state)
+        #self.model.predict(state)이렇게 predict함수 안에 상태를 넣으면 주어진 상태에 대해 에이전트의 신경망 모델을 사용하여 각 행동에 대한 예상 가치(Q-값)를 계산해서 결과로 줍니
+        return np.argmax(act_values[0])  #np.argmax(act_values[0])를 사용하여 가장 높은 예상 가치를 가진 행동의 인덱스를 선택할 수 있도록 해줍니다
+
+    def replay(self, batch_size):
+        #replay 메서드는 DQN 알고리즘의 핵심이에요. 이전에 memory에 저장했던것을 활용해서 경험했던것을 replay해주는 코드에요
+        #에이전트가 과거의 경험(상태, 행동, 보상, 다음 상태의 세트)을 다시 학습함으로써 학습 과정을 안정시키고 효율성을 높이는 데 도움을 줄 수 있어요
+        minibatch = random.sample(self.memory, batch_size)#먼저 에이전트의 메모리(self.memory)에서 임의로 batch_size만큼의 경험을 샘플링합니다
+        for state, action, reward, next_state, done in minibatch:
+        #각 반복에서 한 경험의 구성 요소(상태, 행동, 보상, 다음 상태, 종료 여부)를 가져옵니다
+            target = reward
+#목표 Q-값(target)을 계산합니다. 에피소드가 끝나지 않았다면(not done), 목표 값은 현재 보상과 다음 상태에서 가능한 최대 Q-값의 할인된 합으로 설정됩니다. np.amax배우셨나요? np.argmax가 최대 Q값을 가지는 행동을 선택하기 위해 인덱스를 뽑는거라면 np.amax는 다음 상태에서 예측된 모든 가능한 행동 가치 중 최댓값을 선택합니다.
+            if not done:
+                target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
+#현재 상태에 대해 모델이 예측한 행동 가치들을 가져옵니다(target_f). 그런 다음, 실제로 선택된 행동(action)에 해당하는 가치를 위에서 계산한 목표 Q-값으로 업데이트합니다. 
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)# 우리가 target값 업데이트 했죠 그러면 이제 이 값을 사용하여 신경망의 가중치를 업데이트 해서 에이전트는 장기적인 보상을 최대화하는 행동을 학습하게 됩니다. 이런 방식으로 경험을 replay해서 가중치를 업데이트 해준다는 것 이해가나요? 이해 안간다면 그냥 받아들이는 것을 추천드립니다.
+
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+        #스텝이 지날수록 입실론값 감소해서 학습할수록 점점더 탐험보다는 활용을 더 높게 해줄게요 Qtable에서는 0.001씩 빼주는걸로 값 수정을 했었는데 여기서는 0.995씩 곱해서 감소시켰어요 편하신대로 하시면 돼요
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def save(self, name):
+        self.model.save_weights(name)
+
+
+def one_hot_state(state): #one hot encoding방식을 위한 함수입니다다
+    one_hot = np.zeros(state_size)
+    one_hot[state] = 1
+    return np.reshape(one_hot, [1, state_size])#np.reshape배우셨나요? 이게 dqn구현 연습하면서 되게 중요할 것 같아요 모르신다면 직접 구글링해서 사용방법을 익히는 것을 추천드립니다. 간단하게 설명드리자면 one hot결과를 [1, state_size] 형태의 2차원 배열로 재구성해줘요. 예를들어 볼게요 state_size가 4라고 가정하고 특정 state가 2인 경우를 생각해볼게요. 이때 one_hot 벡터는 [0, 0, 1, 0]로 설정됩니다. 여기서 np.reshape(one_hot, [1, state_size])이 코드를 적용해주면 [[0,0,1,0]]이렇게 2차원으로 구성해주는거죠. 여러 dqn코드 짜다보면 shape오류가 많이 나요. 저는 그랬어요... 그래서 reshape를 잘 알아두는 것을 추천드릴게
+
+agent = DQNAgent(state_size, action_size)
+
+
+import matplotlib.pyplot as plt
+
+EPISODES = 1000
+BATCH_SIZE = 32  
+
+
+rewards_per_episode = []
+
+for e in range(EPISODES):
+    state = env.reset()[0]
+    #env.reset()의 결과가 다들 뭔지 기억나시나요? 튜플형태였는데 제가 2주전에 파이썬에서는 튜플을 인덱스로 접근가능하다는 것을 알려드렸죠? 첫번째 요소를 가져오게 할 수 있는 코드에요
+    #state,_=env.reset()이렇게 해줘도 같은 결과가 state에 들어가요
+    state = one_hot_state(state)
+    done = False
+    total_reward = 0
+    
+    while not done:
+       
+        action = agent.act(state)
+        next_state, reward, done, _ ,_= env.step(action)
+        next_state = one_hot_state(next_state)
+
+        #보상체계를 수정해보자
+        
+        agent.remember(state, action, reward, next_state, done)
+        state = next_state
+        total_reward += reward
+
+        if len(agent.memory) > BATCH_SIZE:
+            agent.replay(BATCH_SIZE)
+
+    if agent.epsilon > agent.epsilon_min:#이거는 경험의 최솟값을 보장해주겠다는 거에요. 이렇게 해도되고 아니면 위에서 act함수에서 max(self.epsilon, self.epsilon_min)이렇게 해줘도 돼요
+        agent.epsilon *= agent.epsilon_decay
+    print(f"Episode: {e+1}/{EPISODES}, Total Reward: {total_reward}, Final Reward: {reward}")
+
+    
+    rewards_per_episode.append(total_reward)
+plt.plot(rewards_per_episode)
+plt.xlabel('Episode')
+plt.ylabel('Total Reward')
+plt.title('Rewards per Episode Over Time')
+plt.show()
+```
