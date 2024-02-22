@@ -285,4 +285,112 @@ plt.show()
 ```
 <img width="475" alt="image" src="https://github.com/doeunjua/frozenlake/assets/122878319/f71ab201-44be-4f2d-9969-93fb494320d7">
 조금의 보상체계 수정 후 돌렸을 떄 이런 결과가 나옵니다. 학습이 나름 잘되었죠? 근데 학습하는데 시간이 너무 오래걸려서 답답합니다. 그래서 여러분은 이 코드를 잘 이해해두시고 실행은 시간날때 해보세요 이 코드가 오래걸리는 이유는 화요일날 재필오빠 수업시간에 말했듯이 model.fit함수를 써서 제가 자동으로 경사하강법 알아서 하도록 해줬잖아요 원래 fit함수 쓰면 정말 오래 걸려요 그래서 fit함수 안쓰고 수동 경사하강법으로 해주면 더 빨리 된답니다. 근데 이 코드에서 fit함수를 빼버리면 sequential까지 고쳐버려야해서 다 뜯어고쳐야합니다. 근데 제가 시간이 없었어요 그래서 대헌님 github에 들어가면 cartpole구현해놓은 코드가 있는데 거기서 shape이랑 신경망 입력 등등 바꿔서 새로만들었어요. 이 코드에도 몇가지 배울 부분이 있어요. 만약에 시간이 남는다면 진행해볼게요요
+```python
+import random
+import gymnasium as gym 
 
+import numpy as np
+from keras.layers import Dense
+from keras.optimizers import Adam
+from keras import Model
+
+import tensorflow as tf
+class DQN(Model):
+    def __init__(self):
+        super(DQN, self).__init__()
+        self.d1 = Dense(16, input_dim=16, activation='relu')
+        self.d2 = Dense(16, activation='relu')
+        self.d3 = Dense(4, activation='linear')
+        self.optimizer = Adam(0.001)
+
+        self.M = []  # M은 리플레이 버퍼
+
+    def call(self, x): # x는 넘파이 어레이
+        x = self.d1(x)
+        x = self.d2(x)
+        y_hat = self.d3(x)
+        return y_hat  
+    
+    def remember(self, state, action, reward, next_state, done):
+        self.M.append((state, action, reward, next_state, done))
+
+def update_model():
+    global model
+
+    if len(model.M) < 1000:
+        return
+    
+    if len(model.M) > 10000:
+        model.M.pop(0)
+
+    
+    
+    batch = random.sample(model.M, 32)
+
+    
+    states = np.array([x[0] for x in batch])  
+    actions = np.array([x[1] for x in batch])  
+    rewards = np.array([x[2] for x in batch])  
+    next_states = np.array([x[3] for x in batch])  
+    dones = np.array([x[4] for x in batch])  
+
+    target_y = model.call(states).numpy()
+    
+    target_y[range(32), actions] = rewards + (1 - dones) * 0.95 * np.max(model.call(next_states).numpy(), axis=1)
+    with tf.GradientTape() as tape:
+        loss = tf.reduce_mean(tf.square(target_y - model.call(states)))
+    grads = tape.gradient(loss, model.trainable_variables)
+    model.optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+model = DQN()
+
+def one_hot_state(state):
+    one_hot = np.zeros(16)
+    one_hot[state] = 1
+    return np.reshape(one_hot, [16])
+
+custom_map = [
+    'FFFF',
+    'FHFH',
+    'FFFH',
+    'HFFG'
+]
+
+
+env = gym.make('FrozenLake-v1', desc=custom_map, is_slippery=False)
+x = []
+
+for episode in range(1000):
+    # env.reset의 반환 구조는 state와 info로 이루어져 있음
+    state, info = env.reset()
+    state = one_hot_state(state)
+
+
+    for step in range(300):
+        # 출력 층에서 소프트맥스를 사용하지 않았으므로
+        # 소프트맥스를 사용하여 선택 확률로 변환 입실론 그리디와 뭐가 다를까요? 입실론 그리디는 랜덤으로 선택하는 것이고 소프트맥스는 확률로 선택하는 것이죠. 소프트맥스에서는 보상의 크기에 따라 선택 확률이 달라집니다.
+        action_list = model.call(np.array([state])).numpy()[0]#여기서 action_list는 4개의 행동에 대한 가치함수 값이 나와요 model.call(np.array([state])).numpy()는 4개의 행동에 대한 가치함수 값이 나오는데 이를 소프트맥스 함수를 통과시켜서 확률로 변환해야 합니다. np.array([state])는 상태를 call함수에 넣어주는거에요 그러면 가치함수 값이 나오겠죠
+        action_list = np.exp(action_list) / np.sum(np.exp(action_list))
+        action = np.random.choice([0, 1, 2, 3], p=action_list)
+        next_state, reward, done, _, _ = env.step(action)
+        next_state = one_hot_state(next_state)
+        # 보상을 크게 설정 그 이유는? 소프트맥스 함수를 사용할때는 보상의 크기에 따라 선택 확률이 달라지기 때문에 보상을 크게 설정해야 학습이 잘 됩니다. 그리고 보상을 크게 설정하면 학습이 빨리 됩니다. 이런거를 여러분들이 시행착오를 거치면서 알게 될거에요 dqn방식에서 모델 사용하는게 다 비슷하지만 이런 세세한 조정으로 학습이 잘 되는지 안되는지가 결정됩니다.
+        if done and reward == 0:
+            reward = -5
+        if not done or reward == 0:
+            reward += 0.001
+        if reward == 1:
+            reward = 5
+        
+        model.M.append((state, action, reward, next_state, done))
+        update_model()
+        state = next_state
+
+        if done:
+            print("Episode: {},  step: {}, last reawrd: {}".format(episode, step, reward))
+            break
+
+    x.append(reward)
+import matplotlib.pyplot as plt
+plt.plot(x, '.')
+```
